@@ -1,0 +1,341 @@
+diff -up evolution-data-server-3.28.5/src/libebackend/e-data-factory.c.tests-retry-client-open evolution-data-server-3.28.5/src/libebackend/e-data-factory.c
+--- evolution-data-server-3.28.5/src/libebackend/e-data-factory.c.tests-retry-client-open	2018-07-30 15:17:06.000000000 +0200
++++ evolution-data-server-3.28.5/src/libebackend/e-data-factory.c	2018-12-04 10:42:29.837599599 +0100
+@@ -1278,6 +1278,13 @@ data_factory_spawn_subprocess_backend (E
+ 	priv = data_factory->priv;
+ 
+ 	source = e_source_registry_ref_source (priv->registry, uid);
++
++	if (!source) {
++		g_set_error (
++			&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
++			_("No such source for UID “%s”"), uid);
++	}
++
+ 	if (source && e_source_has_extension (source, extension_name)) {
+ 		ESourceBackend *extension;
+ 
+@@ -1372,7 +1379,7 @@ data_factory_spawn_subprocess_backend (E
+ 			NULL);
+ 
+ 		g_object_unref (subprocess);
+-	} else {
++	} else if (!error) {
+ 		error = g_error_new (G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+ 			_("Backend factory for source “%s” and extension “%s” cannot be found."),
+ 			uid, extension_name);
+diff -up evolution-data-server-3.28.5/tests/libecal/client/test-cal-client-get-free-busy.c.tests-retry-client-open evolution-data-server-3.28.5/tests/libecal/client/test-cal-client-get-free-busy.c
+--- evolution-data-server-3.28.5/tests/libecal/client/test-cal-client-get-free-busy.c.tests-retry-client-open	2018-12-04 10:43:10.449599037 +0100
++++ evolution-data-server-3.28.5/tests/libecal/client/test-cal-client-get-free-busy.c	2018-12-04 10:43:19.837598907 +0100
+@@ -94,6 +94,49 @@ teardown_fixture (ETestServerFixture *fi
+ }
+ 
+ static void
++add_component_sync (ECalClient *cal_client)
++{
++	const gchar *comp_str =
++		"BEGIN:VEVENT\r\n"
++		"UID:test-fb-event-1\r\n"
++		"DTSTAMP:20040212T000000Z\r\n"
++		"DTSTART:20040213T060000Z\r\n"
++		"DTEND:20040213T080000Z\r\n"
++		"SUMMARY:Test event\r\n"
++		"TRANSP:OPAQUE\r\n"
++		"CLASS:PUBLIC\r\n"
++		"CREATED:20040211T080000Z\r\n"
++		"LAST-MODIFIED:20040211T080000Z\r\n"
++		"END:VEVENT\r\n";
++	icalcomponent *icalcomp;
++	GError *error = NULL;
++
++	icalcomp = icalcomponent_new_from_string (comp_str);
++	g_assert_nonnull (icalcomp);
++
++	if (!e_cal_client_create_object_sync (cal_client, icalcomp, NULL, NULL, &error))
++		g_error ("Failed to add component: %s", error ? error->message : "Unknown error");
++
++	icalcomponent_free (icalcomp);
++	g_clear_error (&error);
++}
++
++static void
++wait_for_dbus_signal (GMainLoop *loop)
++{
++	GMainContext *main_context;
++	gint retries = 0;
++
++	main_context = g_main_loop_get_context (loop);
++
++	while (!received_free_busy_data && retries < 5) {
++		retries++;
++
++		g_main_context_iteration (main_context, TRUE);
++	}
++}
++
++static void
+ free_busy_data_cb (ECalClient *client,
+                    const GSList *free_busy,
+                    const gchar *func_name)
+@@ -114,9 +157,13 @@ test_get_free_busy_sync (ETestServerFixt
+ 
+ 	cal_client = E_TEST_SERVER_UTILS_SERVICE (fixture, ECalClient);
+ 
++	add_component_sync (cal_client);
++
+ 	/* This is set by the free-busy-data callback */
+ 	received_free_busy_data = FALSE;
+ 
++	g_signal_connect (cal_client, "free-busy-data", G_CALLBACK (free_busy_data_cb), (gpointer) G_STRFUNC);
++
+ 	utc = icaltimezone_get_utc_timezone ();
+ 	start = time_from_isodate ("20040212T000000Z");
+ 	end = time_add_day_with_zone (start, 2, utc);
+@@ -127,6 +174,9 @@ test_get_free_busy_sync (ETestServerFixt
+ 
+ 	g_slist_free (users);
+ 
++	wait_for_dbus_signal (fixture->loop);
++
++	g_assert (received_free_busy_data);
+ 	g_assert (freebusy_data);
+ 
+ 	g_slist_free_full (freebusy_data, g_object_unref);
+@@ -147,6 +197,8 @@ async_get_free_busy_result_ready (GObjec
+ 	if (!e_cal_client_get_free_busy_finish (cal_client, result, &freebusy_data, &error))
+ 		g_error ("create object finish: %s", error->message);
+ 
++	wait_for_dbus_signal (loop);
++
+ 	g_assert (received_free_busy_data);
+ 	g_assert (freebusy_data);
+ 
+@@ -166,6 +218,8 @@ test_get_free_busy_async (ETestServerFix
+ 
+ 	cal_client = E_TEST_SERVER_UTILS_SERVICE (fixture, ECalClient);
+ 
++	add_component_sync (cal_client);
++
+ 	/* This is set by the free-busy-data callback */
+ 	received_free_busy_data = FALSE;
+ 
+diff -up evolution-data-server-3.28.5/tests/test-server-utils/e-test-server-utils.c.tests-retry-client-open evolution-data-server-3.28.5/tests/test-server-utils/e-test-server-utils.c
+--- evolution-data-server-3.28.5/tests/test-server-utils/e-test-server-utils.c.tests-retry-client-open	2018-07-30 15:17:06.000000000 +0200
++++ evolution-data-server-3.28.5/tests/test-server-utils/e-test-server-utils.c	2018-12-04 10:43:19.838598907 +0100
+@@ -199,6 +199,7 @@ assert_object_finalized (ETestServerFixt
+ typedef struct {
+ 	ETestServerFixture *fixture;
+ 	ETestServerClosure *closure;
++	guint retries;
+ } FixturePair;
+ 
+ static gboolean
+@@ -332,12 +333,15 @@ e_test_server_utils_bootstrap_timeout (F
+ 	return FALSE;
+ }
+ 
++static gboolean e_test_server_utils_retry_open_client_cb (gpointer user_data);
++
+ static void
+ e_test_server_utils_client_ready (GObject *source_object,
+                                   GAsyncResult *res,
+                                   gpointer user_data)
+ {
+ 	FixturePair *pair = (FixturePair *) user_data;
++	gboolean need_retry = FALSE;
+ 	GError *error = NULL;
+ 
+ 	switch (pair->closure->type) {
+@@ -345,7 +349,10 @@ e_test_server_utils_client_ready (GObjec
+ 		pair->fixture->service.book_client = (EBookClient *)
+ 			e_book_client_connect_finish (res, &error);
+ 
+-		if (!pair->fixture->service.book_client)
++		if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++		    pair->retries < 3)
++			need_retry = TRUE;
++		else if (!pair->fixture->service.book_client)
+ 			g_error ("Unable to create the test book: %s", error->message);
+ 
+ 		break;
+@@ -353,7 +360,10 @@ e_test_server_utils_client_ready (GObjec
+ 		pair->fixture->service.book_client = (EBookClient *)
+ 			e_book_client_connect_direct_finish (res, &error);
+ 
+-		if (!pair->fixture->service.book_client)
++		if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++		    pair->retries < 3)
++			need_retry = TRUE;
++		else if (!pair->fixture->service.book_client)
+ 			g_error ("Unable to create the test book: %s", error->message);
+ 
+ 		break;
+@@ -361,7 +371,10 @@ e_test_server_utils_client_ready (GObjec
+ 		pair->fixture->service.calendar_client = (ECalClient *)
+ 			e_cal_client_connect_finish (res, &error);
+ 
+-		if (!pair->fixture->service.calendar_client)
++		if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++		    pair->retries < 3)
++			need_retry = TRUE;
++		else if (!pair->fixture->service.calendar_client)
+ 			g_error ("Unable to create the test calendar: %s", error->message);
+ 
+ 		break;
+@@ -371,6 +384,14 @@ e_test_server_utils_client_ready (GObjec
+ 		g_assert_not_reached ();
+ 	}
+ 
++	g_clear_error (&error);
++
++	if (need_retry) {
++		pair->retries++;
++		g_timeout_add_seconds (1, e_test_server_utils_retry_open_client_cb, pair);
++		return;
++	}
++
+ 	/* Track ref counts now that we have a client */
+ 	add_weak_ref (pair->fixture, pair->closure->type);
+ 
+@@ -382,6 +403,7 @@ e_test_server_utils_source_added (ESourc
+                                   ESource *source,
+                                   FixturePair *pair)
+ {
++	gboolean need_retry = FALSE;
+ 	GError  *error = NULL;
+ 
+ 	if (g_strcmp0 (e_source_get_uid (source), pair->fixture->source_name) != 0)
+@@ -409,8 +431,13 @@ e_test_server_utils_source_added (ESourc
+ 		}
+ 
+ 		if (!pair->closure->use_async_connect &&
+-		    !pair->fixture->service.book_client)
+-			g_error ("Unable to create the test book: %s", error ? error->message : "Unknown error");
++		    !pair->fixture->service.book_client) {
++			if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++			    pair->retries < 3)
++				need_retry = TRUE;
++			else
++				g_error ("Unable to create the test book: %s", error ? error->message : "Unknown error");
++		}
+ 
+ 		break;
+ 
+@@ -418,11 +445,23 @@ e_test_server_utils_source_added (ESourc
+ 
+ 		/* Dont bother testing the Async apis for deprecated APIs */
+ 		pair->fixture->service.book = e_book_new (source, &error);
+-		if (!pair->fixture->service.book)
+-			g_error ("Unable to create the test book: %s", error->message);
++		if (!pair->fixture->service.book) {
++			if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++			    pair->retries < 3)
++				need_retry = TRUE;
++			else
++				g_error ("Unable to create the test book: %s", error->message);
++
++			break;
++		}
+ 
+-		if (!e_book_open (pair->fixture->service.book, FALSE, &error))
+-			g_error ("Unable to open book: %s", error->message);
++		if (!e_book_open (pair->fixture->service.book, FALSE, &error)) {
++			if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++			    pair->retries < 3)
++				need_retry = TRUE;
++			else
++				g_error ("Unable to open book: %s", error->message);
++		}
+ 
+ 		break;
+ 
+@@ -439,8 +478,13 @@ e_test_server_utils_source_added (ESourc
+ 				e_cal_client_connect_sync (
+ 					source,
+ 					pair->closure->calendar_source_type, (guint32) -1, NULL, &error);
+-			if (!pair->fixture->service.calendar_client)
+-				g_error ("Unable to create the test calendar: %s", error->message);
++			if (!pair->fixture->service.calendar_client) {
++				if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++				    pair->retries < 3)
++					need_retry = TRUE;
++				else
++					g_error ("Unable to create the test calendar: %s", error->message);
++			}
+ 		}
+ 
+ 		break;
+@@ -449,11 +493,22 @@ e_test_server_utils_source_added (ESourc
+ 
+ 		/* Dont bother testing the Async apis for deprecated APIs */
+ 		pair->fixture->service.calendar = e_cal_new (source, pair->closure->calendar_source_type);
+-		if (!pair->fixture->service.calendar)
+-			g_error ("Unable to create the test calendar");
++		if (!pair->fixture->service.calendar) {
++			if (pair->retries < 3)
++				need_retry = TRUE;
++			else
++				g_error ("Unable to create the test calendar");
+ 
+-		if (!e_cal_open (pair->fixture->service.calendar, FALSE, &error))
+-			g_error ("Unable to open calendar: %s", error->message);
++			break;
++		}
++
++		if (!e_cal_open (pair->fixture->service.calendar, FALSE, &error)) {
++			if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND) &&
++			    pair->retries < 3)
++				need_retry = TRUE;
++			else
++				g_error ("Unable to open calendar: %s", error->message);
++		}
+ 
+ 		break;
+ 
+@@ -461,6 +516,14 @@ e_test_server_utils_source_added (ESourc
+ 		return;
+ 	}
+ 
++	g_clear_error (&error);
++
++	if (need_retry) {
++		pair->retries++;
++		g_timeout_add_seconds (1, e_test_server_utils_retry_open_client_cb, pair);
++		return;
++	}
++
+ 	/* Add the weak ref now if we just created it */
+ 	if (pair->closure->type != E_TEST_SERVER_NONE &&
+ 	    pair->closure->use_async_connect == FALSE)
+@@ -471,6 +534,22 @@ e_test_server_utils_source_added (ESourc
+ }
+ 
+ static gboolean
++e_test_server_utils_retry_open_client_cb (gpointer user_data)
++{
++	FixturePair *pair = user_data;
++	ESource *source;
++
++	source = e_source_registry_ref_source (pair->fixture->registry, pair->fixture->source_name);
++
++	g_assert (E_IS_SOURCE (source));
++
++	e_test_server_utils_source_added (pair->fixture->registry, source, pair);
++	g_object_unref (source);
++
++	return FALSE;
++}
++
++static gboolean
+ e_test_server_utils_bootstrap_idle (FixturePair *pair)
+ {
+ 	ESourceBackend *backend = NULL;
+@@ -578,7 +657,7 @@ e_test_server_utils_setup (ETestServerFi
+                            gconstpointer user_data)
+ {
+ 	ETestServerClosure *closure = (ETestServerClosure *) user_data;
+-	FixturePair         pair = { fixture, closure };
++	FixturePair         pair = { fixture, closure, 0 };
+ 
+ 	/* Create work directory */
+ 	if (!test_installed_services ())

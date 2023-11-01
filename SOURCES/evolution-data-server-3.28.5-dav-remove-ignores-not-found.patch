@@ -1,0 +1,34 @@
+diff -up evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c.dav-remove-ignores-not-found evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c
+--- evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c.dav-remove-ignores-not-found	2018-11-28 14:31:11.278711852 +0100
++++ evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c	2018-11-28 14:32:38.231710649 +0100
+@@ -1160,6 +1160,13 @@ ebb_webdav_remove_contact_sync (EBookMet
+ 	g_object_unref (contact);
+ 	g_free (etag);
+ 
++	/* Ignore not found errors, this was a delete and the resource is gone.
++	   It can be that it had been deleted on the server by other application. */
++	if (g_error_matches (local_error, SOUP_HTTP_ERROR, SOUP_STATUS_NOT_FOUND)) {
++		g_clear_error (&local_error);
++		success = TRUE;
++	}
++
+ 	if (local_error) {
+ 		ebb_webdav_check_credentials_error (bbdav, webdav, local_error);
+ 		g_propagate_error (error, local_error);
+diff -up evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c.dav-remove-ignores-not-found evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c
+--- evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c.dav-remove-ignores-not-found	2018-11-28 14:30:52.299712114 +0100
++++ evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c	2018-11-28 14:31:11.279711852 +0100
+@@ -1320,6 +1320,13 @@ ecb_caldav_remove_component_sync (ECalMe
+ 	icalcomponent_free (icalcomp);
+ 	g_free (etag);
+ 
++	/* Ignore not found errors, this was a delete and the resource is gone.
++	   It can be that it had been deleted on the server by other application. */
++	if (g_error_matches (local_error, SOUP_HTTP_ERROR, SOUP_STATUS_NOT_FOUND)) {
++		g_clear_error (&local_error);
++		success = TRUE;
++	}
++
+ 	if (local_error) {
+ 		ecb_caldav_check_credentials_error (cbdav, webdav, local_error);
+ 		g_propagate_error (error, local_error);
