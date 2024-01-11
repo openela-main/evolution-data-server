@@ -1,0 +1,14 @@
+diff --git a/src/addressbook/libebook-contacts/e-vcard.c b/src/addressbook/libebook-contacts/e-vcard.c
+index f11a17d77..e44b7fdcf 100644
+--- a/src/addressbook/libebook-contacts/e-vcard.c
++++ b/src/addressbook/libebook-contacts/e-vcard.c
+@@ -2395,8 +2395,8 @@ e_vcard_attribute_remove_param_value (EVCardAttribute *attr,
+ 				return;
+ 			}
+ 
+-			param->values = g_list_delete_link (param->values, l);
+ 			g_free (l->data);
++			param->values = g_list_delete_link (param->values, l);
+ 
+ 			if (param->values == NULL) {
+ 				e_vcard_attribute_param_free (param);

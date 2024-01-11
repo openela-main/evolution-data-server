@@ -1,0 +1,24 @@
+diff -up evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c.dav-online-load-href evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c
+--- evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c.dav-online-load-href	2018-11-26 12:18:57.874823757 +0100
++++ evolution-data-server-3.28.5/src/addressbook/backends/webdav/e-book-backend-webdav.c	2018-11-26 12:20:27.967822511 +0100
+@@ -993,6 +993,8 @@ ebb_webdav_load_contact_sync (EBookMetaB
+ 		if (!*out_contact) {
+ 			success = FALSE;
+ 			g_propagate_error (&local_error, EDB_ERROR_EX (E_DATA_BOOK_STATUS_OTHER_ERROR, _("Received object is not a valid vCard")));
++		} else if (out_extra) {
++			*out_extra = g_strdup (href);
+ 		}
+ 	}
+ 
+diff -up evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c.dav-online-load-href evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c
+--- evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c.dav-online-load-href	2018-11-26 12:19:15.809823509 +0100
++++ evolution-data-server-3.28.5/src/calendar/backends/caldav/e-cal-backend-caldav.c	2018-11-26 12:20:03.976822843 +0100
+@@ -1135,6 +1135,8 @@ ecb_caldav_load_component_sync (ECalMeta
+ 		if (!*out_component) {
+ 			success = FALSE;
+ 			g_propagate_error (&local_error, EDC_ERROR (InvalidObject));
++		} else if (out_extra) {
++			*out_extra = g_strdup (href);
+ 		}
+ 	}
+ 
