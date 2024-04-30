@@ -54,7 +54,7 @@
 
 Name: evolution-data-server
 Version: 3.40.4
-Release: 6%{?dist}
+Release: 9%{?dist}
 Summary: Backend data server for Evolution
 License: LGPLv2+
 URL: https://wiki.gnome.org/Apps/Evolution
@@ -65,12 +65,16 @@ Patch02: evolution-data-server-3.40.4-secret-monitor-warnings.patch
 Patch03: evolution-data-server-3.40.4-google-contacts-to-carddav.patch
 Patch04: evolution-data-server-3.40.4-google-oauth2.patch
 Patch05: evolution-data-server-3.40.4-caldav-crash.patch
+Patch06: evolution-data-server-3.40.4-no-libedataserverui-in-alarm-notify.patch
+Patch07: 0007-oauth2-enable-html5-features.patch
 
 Provides: evolution-webcal = %{version}
 Obsoletes: evolution-webcal < 2.24.0
 
 # RH-bug #1362477
 Recommends: pinentry-gui
+
+Recommends: %{name}-ui
 
 %if 0%{?fedora}
 # From rhughes-f20-gnome-3-12 copr
@@ -152,11 +156,26 @@ Requires: pkgconfig(libical-glib) >= %{libical_version}
 Requires: pkgconfig(libsecret-unstable) >= %{libsecret_version}
 Requires: pkgconfig(libsoup-2.4) >= %{libsoup_version}
 Requires: pkgconfig(sqlite3) >= %{sqlite_version}
-Requires: pkgconfig(webkit2gtk-4.0) >= %{webkit2gtk_version}
 Requires: pkgconfig(json-glib-1.0) >= %{json_glib_version}
 
 %description devel
 Development files needed for building things which link against %{name}.
+
+%package ui
+Summary: libedataserverui library from %{name}
+Requires: %{name}%{?_isa} = %{version}-%{release}
+
+%description ui
+libedataserverui library files from %{name}.
+
+%package ui-devel
+Summary: Development files for building against libedataserverui from %{name}
+Requires: %{name}-devel%{?_isa} = %{version}-%{release}
+Requires: %{name}-ui%{?_isa} = %{version}-%{release}
+Requires: pkgconfig(webkit2gtk-4.0) >= %{webkit2gtk_version}
+
+%description ui-devel
+Development files needed for building things which link against libedataserverui from %{name}.
 
 %package langpacks
 Summary: Translations for %{name}
@@ -307,8 +326,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_libdir}/libedata-cal-2.0.so.1.0.0
 %{_libdir}/libedataserver-1.2.so.26
 %{_libdir}/libedataserver-1.2.so.26.0.0
-%{_libdir}/libedataserverui-1.2.so.3
-%{_libdir}/libedataserverui-1.2.so.3.0.0
 
 %{_libdir}/girepository-1.0/Camel-1.2.typelib
 %{_libdir}/girepository-1.0/EBackend-1.2.typelib
@@ -318,7 +335,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_libdir}/girepository-1.0/EDataBook-1.2.typelib
 %{_libdir}/girepository-1.0/EDataCal-2.0.typelib
 %{_libdir}/girepository-1.0/EDataServer-1.2.typelib
-%{_libdir}/girepository-1.0/EDataServerUI-1.2.typelib
 
 %{_libexecdir}/camel-gpg-photo-saver
 %{_libexecdir}/camel-index-control-1.2
@@ -366,7 +382,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %dir %{ebook_backends_dir}
 %dir %{ecal_backends_dir}
 %dir %{modules_dir}
-%dir %{uimodules_dir}
 
 %{_libdir}/evolution-data-server/libedbus-private.so
 
@@ -407,12 +422,18 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{modules_dir}/module-oauth2-services.so
 %{modules_dir}/module-outlook-backend.so
 %{modules_dir}/module-secret-monitor.so
-%{modules_dir}/module-trust-prompt.so
 %{modules_dir}/module-webdav-backend.so
 %{modules_dir}/module-yahoo-backend.so
 
 %files devel
-%{_includedir}/evolution-data-server
+%{_includedir}/evolution-data-server/camel
+%{_includedir}/evolution-data-server/libebackend
+%{_includedir}/evolution-data-server/libebook
+%{_includedir}/evolution-data-server/libebook-contacts
+%{_includedir}/evolution-data-server/libecal
+%{_includedir}/evolution-data-server/libedata-book
+%{_includedir}/evolution-data-server/libedata-cal
+%{_includedir}/evolution-data-server/libedataserver
 %{_libdir}/libcamel-1.2.so
 %{_libdir}/libebackend-1.2.so
 %{_libdir}/libebook-1.2.so
@@ -421,7 +442,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_libdir}/libedata-book-1.2.so
 %{_libdir}/libedata-cal-2.0.so
 %{_libdir}/libedataserver-1.2.so
-%{_libdir}/libedataserverui-1.2.so
 %{_libdir}/pkgconfig/camel-1.2.pc
 %{_libdir}/pkgconfig/evolution-data-server-1.2.pc
 %{_libdir}/pkgconfig/libebackend-1.2.pc
@@ -431,7 +451,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_libdir}/pkgconfig/libedata-book-1.2.pc
 %{_libdir}/pkgconfig/libedata-cal-2.0.pc
 %{_libdir}/pkgconfig/libedataserver-1.2.pc
-%{_libdir}/pkgconfig/libedataserverui-1.2.pc
 %{_datadir}/gir-1.0/Camel-1.2.gir
 %{_datadir}/gir-1.0/EBackend-1.2.gir
 %{_datadir}/gir-1.0/EBook-1.2.gir
@@ -440,7 +459,6 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_datadir}/gir-1.0/EDataBook-1.2.gir
 %{_datadir}/gir-1.0/EDataCal-2.0.gir
 %{_datadir}/gir-1.0/EDataServer-1.2.gir
-%{_datadir}/gir-1.0/EDataServerUI-1.2.gir
 %{_datadir}/vala/vapi/camel-1.2.deps
 %{_datadir}/vala/vapi/camel-1.2.vapi
 %{_datadir}/vala/vapi/libebackend-1.2.deps
@@ -457,6 +475,19 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_datadir}/vala/vapi/libedata-cal-2.0.vapi
 %{_datadir}/vala/vapi/libedataserver-1.2.deps
 %{_datadir}/vala/vapi/libedataserver-1.2.vapi
+
+%files ui
+%dir %{uimodules_dir}
+%{_libdir}/libedataserverui-1.2.so.3
+%{_libdir}/libedataserverui-1.2.so.3.0.0
+%{_libdir}/girepository-1.0/EDataServerUI-1.2.typelib
+%{modules_dir}/module-trust-prompt.so
+
+%files ui-devel
+%{_includedir}/evolution-data-server/libedataserverui
+%{_libdir}/libedataserverui-1.2.so
+%{_libdir}/pkgconfig/libedataserverui-1.2.pc
+%{_datadir}/gir-1.0/EDataServerUI-1.2.gir
 %{_datadir}/vala/vapi/libedataserverui-1.2.deps
 %{_datadir}/vala/vapi/libedataserverui-1.2.vapi
 
@@ -480,6 +511,16 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_datadir}/installed-tests
 
 %changelog
+* Thu Jan 11 2024 Milan Crha <mcrha@redhat.com> - 3.40.4-9
+- Resolves: RHEL-21361 (OAuth2: Enable HTML5 database and local storage features for web view)
+
+* Wed Oct 11 2023 Milan Crha <mcrha@redhat.com> - 3.40.4-8
+- Resolves: RHEL-12405 (Move WebKitGTK parts in Evolution Data Server into optional subpackage)
+- Add requirement on ui subpackage into ui-devel subpackage
+
+* Tue Oct 10 2023 Milan Crha <mcrha@redhat.com> - 3.40.4-7
+- Resolves: RHEL-12405 (Move WebKitGTK parts in Evolution Data Server into optional subpackage)
+
 * Tue May 24 2022 Milan Crha <mcrha@redhat.com> - 3.40.4-6
 - Resolves: #2089902 (CalDAV: Crash on calendar update)
 
