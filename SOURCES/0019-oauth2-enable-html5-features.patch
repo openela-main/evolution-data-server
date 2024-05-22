@@ -1,0 +1,53 @@
+diff -up evolution-data-server-3.28.5/src/libedataserverui/e-credentials-prompter-impl-oauth2.c.oauth2-enable-html5-features evolution-data-server-3.28.5/src/libedataserverui/e-credentials-prompter-impl-oauth2.c
+--- evolution-data-server-3.28.5/src/libedataserverui/e-credentials-prompter-impl-oauth2.c.oauth2-enable-html5-features	2018-07-30 15:17:06.000000000 +0200
++++ evolution-data-server-3.28.5/src/libedataserverui/e-credentials-prompter-impl-oauth2.c	2024-01-11 16:00:50.316053801 +0100
+@@ -571,7 +571,9 @@ e_credentials_prompter_impl_oauth2_show_
+ 	GtkScrolledWindow *scrolled_window;
+ 	GtkWindow *dialog_parent;
+ 	ECredentialsPrompter *prompter;
++	WebKitCookieManager *cookie_manager;
+ 	WebKitSettings *webkit_settings;
++	WebKitWebContext *web_context;
+ 	gchar *title, *uri;
+ 	GString *info_markup;
+ 	gint row = 0;
+@@ -670,16 +672,28 @@ e_credentials_prompter_impl_oauth2_show_
+ 	webkit_settings = webkit_settings_new_with_settings (
+ 		"auto-load-images", TRUE,
+ 		"default-charset", "utf-8",
+-		"enable-html5-database", FALSE,
+ 		"enable-dns-prefetching", FALSE,
+-		"enable-html5-local-storage", FALSE,
++		"enable-html5-database", TRUE,
++		"enable-html5-local-storage", TRUE,
+ 		"enable-offline-web-application-cache", FALSE,
+ 		"enable-page-cache", FALSE,
+ 		"enable-plugins", FALSE,
+ 		"media-playback-allows-inline", FALSE,
+ 		NULL);
+ 
+-	widget = webkit_web_view_new_with_settings (webkit_settings);
++	web_context = webkit_web_context_new ();
++	#if WEBKIT_CHECK_VERSION(2, 40, 0)
++	webkit_web_context_set_sandbox_enabled (web_context, TRUE);
++	#endif
++
++	cookie_manager = webkit_web_context_get_cookie_manager (web_context);
++	webkit_cookie_manager_set_accept_policy (cookie_manager, WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS);
++
++	widget = g_object_new (WEBKIT_TYPE_WEB_VIEW,
++			"settings", webkit_settings,
++			"web-context", web_context,
++			NULL);
++
+ 	g_object_set (
+ 		G_OBJECT (widget),
+ 		"hexpand", TRUE,
+@@ -689,6 +703,7 @@ e_credentials_prompter_impl_oauth2_show_
+ 		NULL);
+ 	gtk_container_add (GTK_CONTAINER (scrolled_window), widget);
+ 	g_object_unref (webkit_settings);
++	g_object_unref (web_context);
+ 
+ 	prompter_oauth2->priv->web_view = WEBKIT_WEB_VIEW (widget);
+ 
