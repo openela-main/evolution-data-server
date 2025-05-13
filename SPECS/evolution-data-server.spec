@@ -54,7 +54,7 @@
 
 Name: evolution-data-server
 Version: 3.40.4
-Release: 9%{?dist}
+Release: 10%{?dist}
 Summary: Backend data server for Evolution
 License: LGPLv2+
 URL: https://wiki.gnome.org/Apps/Evolution
@@ -67,6 +67,7 @@ Patch04: evolution-data-server-3.40.4-google-oauth2.patch
 Patch05: evolution-data-server-3.40.4-caldav-crash.patch
 Patch06: evolution-data-server-3.40.4-no-libedataserverui-in-alarm-notify.patch
 Patch07: 0007-oauth2-enable-html5-features.patch
+Patch08: 0008-ebackend-network-change-handler.patch
 
 Provides: evolution-webcal = %{version}
 Obsoletes: evolution-webcal < 2.24.0
@@ -511,6 +512,9 @@ find $RPM_BUILD_ROOT -name '*.so.*' -exec chmod +x {} \;
 %{_datadir}/installed-tests
 
 %changelog
+* Mon Feb 03 2025 Milan Crha <mcrha@redhat.com> - 3.40.4-10
+- Resolves: RHEL-72799 (EBackend: Change when adding signal handler for "network-changed")
+
 * Thu Jan 11 2024 Milan Crha <mcrha@redhat.com> - 3.40.4-9
 - Resolves: RHEL-21361 (OAuth2: Enable HTML5 database and local storage features for web view)
 

@@ -1,0 +1,66 @@
+From 9a3d7e63cbdc2703f18f70cb38d55a8741cb919d Mon Sep 17 00:00:00 2001
+Date: Mon, 3 Feb 2025 13:43:08 +0100
+Subject: [PATCH] EBackend: Change when adding signal handler for
+ "network-changed"
+
+The handler requires a valid ESource instance, otherwise there's printed
+a runtime warning about failed assertion for "E_IS_SOURCE (source)" from
+the e_source_unset_last_credentials_required_arguments() function.
+
+The signal can be (rarely) received between the class' init() and
+constructed() methods, thus before the object's `source` property
+is set, leading to this runtime warning.
+
+The fix is to listen for the "network-changed" signal only after
+the constructed() function is called. It does not make much sense to do
+it before that anyway.
+---
+ src/libebackend/e-backend.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/libebackend/e-backend.c b/src/libebackend/e-backend.c
+index 0af7240536..7932c54866 100644
+--- a/src/libebackend/e-backend.c
++++ b/src/libebackend/e-backend.c
+@@ -701,12 +701,18 @@ backend_constructed (GObject *object)
+ 	EBackend *backend;
+ 	ESource *source;
+ 	const gchar *extension_name;
++	gulong handler_id;
+ 
+ 	backend = E_BACKEND (object);
+ 
+ 	/* Chain up to parent's constructed() method. */
+ 	G_OBJECT_CLASS (e_backend_parent_class)->constructed (object);
+ 
++	handler_id = g_signal_connect (
++		backend->priv->network_monitor, "network-changed",
++		G_CALLBACK (backend_network_changed_cb), backend);
++	backend->priv->network_changed_handler_id = handler_id;
++
+ 	/* Get an initial GSocketConnectable from the data
+ 	 * source's [Authentication] extension, if present. */
+ 	source = e_backend_get_source (backend);
+@@ -854,7 +860,6 @@ static void
+ e_backend_init (EBackend *backend)
+ {
+ 	GNetworkMonitor *network_monitor;
+-	gulong handler_id;
+ 
+ 	backend->priv = e_backend_get_instance_private (backend);
+ 	backend->priv->prompter = e_user_prompter_new ();
+@@ -874,11 +879,6 @@ e_backend_init (EBackend *backend)
+ 	network_monitor = e_network_monitor_get_default ();
+ 	backend->priv->network_monitor = g_object_ref (network_monitor);
+ 	backend->priv->online = g_network_monitor_get_network_available (network_monitor);
+-
+-	handler_id = g_signal_connect (
+-		backend->priv->network_monitor, "network-changed",
+-		G_CALLBACK (backend_network_changed_cb), backend);
+-	backend->priv->network_changed_handler_id = handler_id;
+ }
+ 
+ /**
+-- 
+GitLab
+
